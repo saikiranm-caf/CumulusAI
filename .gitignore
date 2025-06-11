@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pytest_cache/
+*.mypy_cache/
+
+# Env folders (assuming venv in each service folder)
+*/venv/
+
+# Environment variables files
+*.env
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Others
+*.sqlite3
