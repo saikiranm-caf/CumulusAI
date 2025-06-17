@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 load_dotenv()  
 app = FastAPI()
 
+port = int(os.getenv("PORT", 8001))
+
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 
 @app.get("/weather")

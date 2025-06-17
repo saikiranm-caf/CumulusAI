@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 from typing import List
 
+port = int(os.getenv("PORT", 8003))
 # Windows asyncio fix for Playwright subprocess support
 if sys.platform.startswith("win"):
     import asyncio

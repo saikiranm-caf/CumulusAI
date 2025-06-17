@@ -20,3 +20,5 @@ __pycache__/
 
 # Others
 *.sqlite3
+start_all.py
+venv/

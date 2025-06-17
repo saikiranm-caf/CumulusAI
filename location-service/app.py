@@ -12,6 +12,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
+port = int(os.getenv("PORT", 8002))
 load_dotenv()
 
 app = FastAPI()

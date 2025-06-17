@@ -9,7 +9,8 @@ from typing import List
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 import time
-
+import os
+port = int(os.getenv("PORT", 8004))
 app = FastAPI()
 
 def get_event_page(state: str, country: str) -> str:

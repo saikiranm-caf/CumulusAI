@@ -10,6 +10,7 @@ app = FastAPI()
 
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "your_api_key_here")
 
+port = int(os.getenv("PORT", 8006))
 
 @app.get("/blogs")
 def get_blogs(query: str = "technology", language: str = "en", max_results: int = 10):
