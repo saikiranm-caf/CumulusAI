@@ -147,6 +147,7 @@ def parse_google_address_components(google_data):
 
 @app.get("/location")
 def get_location(lat: float, lon: float):
+    print(f"🔥Control at location")
     nominatim_result = reverse_geocode_nominatim(lat, lon)
     if nominatim_result and nominatim_result.get("display_name"):
         return {"source": "nominatim", **nominatim_result}

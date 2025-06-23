@@ -11,6 +11,7 @@ WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 
 @app.get("/weather")
 def get_weather(lat: float, lon: float):
+    print(f"🔥Control at weather")
     if not WEATHER_API_KEY:
         raise HTTPException(status_code=500, detail="Missing WEATHER_API_KEY environment variable")
     

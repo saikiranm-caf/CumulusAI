@@ -134,6 +134,7 @@ def parse_event_details(event_html: str) -> dict:
 @app.get("/events")
 def get_events(state: str = Query(..., description="State or region name"),
                country: str = Query(..., description="Country name")):
+    print(f"🔥Control at events")
     print(f"📍 Getting events for: {state}, {country}…")
     page_source = get_event_page(state, country)
     print("✅ Received HTML from browser_scraper. Length:", len(page_source))

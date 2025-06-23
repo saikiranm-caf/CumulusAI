@@ -6,6 +6,7 @@ app = FastAPI()
 
 @app.get("/user-preferences")
 def get_user_preferences(user_id: str = Query(...)):
+    print(f"🔥Control at user-pref")
     activities = fetch_user_preferences(user_id)
     return {
         "user_id": user_id,

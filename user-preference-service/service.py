@@ -1,6 +1,7 @@
 from database import get_db_connection
 
 def fetch_user_preferences(user_id):
+    print(f"🔥Control at user-prefservice")
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 

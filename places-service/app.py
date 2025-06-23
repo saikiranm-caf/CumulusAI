@@ -326,7 +326,7 @@ def places_api(lat: float = Query(..., description="Latitude"),
                lon: float = Query(..., description="Longitude"),
                query: str = Query(..., description="Place query, e.g. 'park'")):
 
-    
+    print(f"🔥Control at places")
     print(f"[API] Request for Google places API: lat={lat}, lon={lon}, query='{query}'")
     places = get_places_from_google_api(lat, lon, query, GOOGLE_API_KEY)
 
