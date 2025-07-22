@@ -22,3 +22,23 @@ def fetch_user_preferences(user_id):
     cursor.close()
     conn.close()
     return result
+
+
+# def fetch_user_preferences(user_id):
+#     conn = get_db_connection()
+#     cursor = conn.cursor(dictionary=True)
+
+#     # Existing query for activities...
+
+#     # Add behavior query (assume a new table 'user_behavior' with columns like 'behavior_type', 'frequency')
+#     behavior_query = """
+#         SELECT behavior_type, frequency
+#         FROM user_behavior
+#         WHERE user_id = %s
+#     """
+#     cursor.execute(behavior_query, (user_id,))
+#     behaviors = cursor.fetchall()
+
+#     cursor.close()
+#     conn.close()
+#     return {"activities": result, "behaviors": behaviors}

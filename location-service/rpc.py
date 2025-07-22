@@ -14,12 +14,22 @@ async def on_request(msg: IncomingMessage):
     async with msg.process():
         # parse the incoming RPC request
         payload = json.loads(msg.body.decode())
-        lat, lon = payload["lat"], payload["lon"]
+        lat = payload.get("lat")
+        lon = payload.get("lon")
+        time = payload.get("time")
+        user_id = payload.get("user_id")
+        age = payload.get("age")
+        gender = payload.get("gender")
+        motion_state = payload.get("motion_state")
 
-        # call your sync business logic
-        result = await asyncio.to_thread(get_location, lat, lon)
+        # Validate required parameters
+        if not all([lat, lon, time, user_id, age, gender]):
+            raise ValueError("Missing required parameters: lat, lon, time, user_id, age, or gender")
 
-        # publish the reply back on the shared channel’s default_exchange
+        # Call your sync business logic with all parameters
+        result = await asyncio.to_thread(get_location, lat, lon, time, user_id, age, gender, motion_state)
+
+        # Publish the reply back on the shared channel’s default_exchange
         await _publish_channel.default_exchange.publish(
             Message(
                 body=json.dumps(result).encode(),
@@ -32,7 +42,7 @@ async def main():
     global _publish_channel
 
     # 1. Connect & open a channel
-    conn             = await connect_robust(RABBITMQ_URL)
+    conn = await connect_robust(RABBITMQ_URL)
     _publish_channel = await conn.channel()
 
     # 2. Declare your RPC queue

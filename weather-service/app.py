@@ -21,6 +21,7 @@ def get_weather(lat: float, lon: float):
         resp = requests.get(url)
         resp.raise_for_status()
         data = resp.json()
+        print(f"Weather data fetched: {data}")
         weather = {
             "temperature": data["main"]["temp"],
             "description": data["weather"][0]["description"]

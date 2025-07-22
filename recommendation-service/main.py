@@ -1,15 +1,17 @@
 # recommendation-service/main.py
-
 import os
 import requests
 import asyncio
 from fastapi import FastAPI, Query, BackgroundTasks, HTTPException
 from dotenv import load_dotenv
-
+import redis.asyncio as redis
 from schemas import RecommendationRequest, RecommendationResponse
 from publisher import publish_recommendation_request
 from config import settings
-from tasks import process_recommendation_task  # Import the function, not the app
+from tasks import process_recommendation_task
+import logging
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -19,104 +21,113 @@ app = FastAPI(
     description="Blocking and non-blocking recommendation endpoints"
 )
 
-LLM_MODEL   = settings.LLM_MODEL # Use settings from config.py
-GATEWAY_URL = settings.GATEWAY_URL # Use settings from config.py
+LLM_MODEL = settings.LLM_MODEL
+GATEWAY_URL = settings.GATEWAY_URL
+redis_client: redis.Redis = None
 
-# In-memory store for async results (swap out for DB/Redis in prod)
-_async_results: dict[str, str] = {}
+@app.on_event("startup")
+async def startup_event():
+    global redis_client
+    redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+    try:
+        await redis_client.ping()
+        logger.info("💡 Connected to Redis")
+    except redis.exceptions.ConnectionError as e:
+        logger.error(f"❌ Could not connect to Redis: {e}")
+        raise ConnectionError(f"Failed to connect to Redis on startup: {e}")
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    if redis_client:
+        await redis_client.close()
+        logger.info("🛑 Disconnected from Redis")
 
-# --- Blocking Recommendation Endpoint ---
 @app.get(
     "/recommendation",
     summary="🔄 Blocking: run all calls + LLM, then return",
     response_model=RecommendationResponse
 )
 async def recommend(
-    user_id: str  = Query(..., description="Your user ID"),
-    lat:     float = Query(..., description="Latitude"),
-    lon:     float = Query(..., description="Longitude"),
+    user_id: str = Query(..., description="Your user ID"),
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude"),
+    age: int = Query(None, description="User age, optional"),
+    gender: str = Query(None, description="User gender, optional (M/F)"),
+    time_of_day: str = Query(None, description="Time of day, optional (e.g., '01:25 PM')"),
+    motion_state: str = Query(None, description="User motion state, optional (e.g., 'walking')")
 ):
     try:
-        # Call the task function directly
         prompt_content = await process_recommendation_task(
-            RecommendationRequest(user_id=user_id, lat=lat, lon=lon)
+            RecommendationRequest(user_id=user_id, lat=lat, lon=lon, age=age, gender=gender, time_of_day=time_of_day,motion_state=motion_state)
         )
-
-        # Now, call the LLM with the generated prompt
-        print("🔥 Calling LLM with prompt:")
-        print(prompt_content)
-
-        resp = requests.post(
+        llm_resp = await asyncio.to_thread(
+            requests.post,
             "http://localhost:11434/api/generate",
             json={
-                "model":  LLM_MODEL,
+                "model": LLM_MODEL,
                 "prompt": prompt_content,
                 "stream": False
             }
-        ).json()
-
-        recommendation = resp.get("response", "No suggestion available.")
-
+        )
+        llm_resp.raise_for_status()
+        recommendation_text = llm_resp.json().get("response", "No suggestion available.")
+        logger.info(f"LLM response: {recommendation_text}")
+        
+        # Store in Redis for async polling
+        await redis_client.set(f"recommendation:{user_id}", recommendation_text)
+        print(f"Stored recommendation for {user_id}: {recommendation_text}")
+        return {"status": "ready", "recommendation": recommendation_text}
     except Exception as e:
+        logger.error(f"Error in recommendation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    return {"recommendation": recommendation}
-
-
-# --- Non-blocking Recommendation Endpoint (using RabbitMQ) ---
 @app.get(
     "/recommendation/async",
-    summary="⚡ Non-blocking: enqueue & return immediately via RabbitMQ"
+    summary="🚀 Non-blocking: enqueue, return immediately",
+    response_model=dict
 )
 async def recommend_async(
-    user_id:          str   = Query(...),
-    lat:              float = Query(...),
-    lon:              float = Query(...),
+    background_tasks: BackgroundTasks,
+    user_id: str = Query(..., description="Your user ID"),
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude"),
+    age: int = Query(None, description="User age, optional"),
+    gender: str = Query(None, description="User gender, optional (M/F)"),
+    time_of_day: str = Query(None, description="Time of day, optional (e.g., '01:25 PM')"),
+    motion_state: str = Query(None, description="User motion state, optional (e.g., 'walking')")
 ):
-    """
-    Publishes a recommendation request to RabbitMQ and returns immediately.
-    The result can be polled via /recommendation/result.
-    """
-    task_payload = RecommendationRequest(user_id=user_id, lat=lat, lon=lon)
-    await publish_recommendation_request(task_payload)
+    task_payload = RecommendationRequest(user_id=user_id, lat=lat, lon=lon, age=age, gender=gender, time_of_day=time_of_day, motion_state=motion_state)
+    background_tasks.add_task(publish_recommendation_request, task_payload)
     return {"message": f"Enqueued recommendation for {user_id}. Poll /recommendation/result for status."}
 
-
-# --- Endpoint to poll for async results ---
 @app.get(
     "/recommendation/result",
     summary="📥 Poll for async recommendation result",
-    response_model=RecommendationResponse # Can be pending or ready
+    response_model=RecommendationResponse
 )
-def get_recommendation_result(
+async def get_recommendation_result(
     user_id: str = Query(..., description="Your user ID")
 ):
-    """
-    Returns pending/ready + the recommendation when ready.
-    """
-    if user_id not in _async_results:
-        return {"status": "pending", "recommendation": None} # Return None for recommendation when pending
+    if redis_client is None:
+        raise HTTPException(status_code=500, detail="Redis client not initialized.")
+    
+    try:
+        recommendation_text = await redis_client.get(f"recommendation:{user_id}")
+    except redis.exceptions.ConnectionError as e:
+        logger.error(f"Redis connection error: {e}")
+        raise HTTPException(status_code=500, detail=f"Redis connection error: {e}")
 
+    if recommendation_text is None:
+        return {"status": "pending", "recommendation": None}
+
+    try:
+        await redis_client.delete(f"recommendation:{user_id}")
+    except redis.exceptions.ConnectionError as e:
+        logger.warning(f"Could not delete from Redis for user {user_id}: {e}")
+    except Exception as e:
+        logger.warning(f"Unexpected error deleting from Redis for user {user_id}: {e}")
+    print(f"Stored recommendation for {user_id}: {recommendation_text}")
     return {
-        "status":         "ready",
-        "recommendation": _async_results.pop(user_id)
+        "status": "ready",
+        "recommendation": recommendation_text
     }
-
-# --- Background Worker for RabbitMQ Consumer to store results ---
-# This function will be called by the RabbitMQ consumer (consumer.py)
-# to store the final LLM output in our in-memory cache.
-async def store_async_recommendation(user_id: str, recommendation_text: str):
-    """
-    Stores the completed recommendation in the in-memory dictionary.
-    This function will be called by the RabbitMQ consumer after processing.
-    """
-    _async_results[user_id] = recommendation_text
-    print(f"✅ Stored async result for user {user_id}")
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app", host="0.0.0.0", port=settings.PORT, reload=True
-    )

@@ -10,6 +10,8 @@ class Settings:
     RABBITMQ_URL: str    = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost/")
     QUEUE_NAME: str      = os.getenv("QUEUE_NAME", "recommendation_requests")
     LLM_MODEL: str       = os.getenv("LLM_MODEL", "mistral:7b-instruct")
+    REDIS_URL: str       = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    MODEL_PATH: str      = os.getenv("MODEL_PATH", "C:/DevProjects/deviceai-microservices/training-service/recommendation_model.h5")
 
     class Config:
        env_file = ".env"
